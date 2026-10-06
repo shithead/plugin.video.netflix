@@ -143,7 +143,3 @@ tests/userdata/shows/
 # Captured network traces (contain session material)
 references/
 *.har
-
-# Captured network traces (may contain session material)
-references/
-*.har

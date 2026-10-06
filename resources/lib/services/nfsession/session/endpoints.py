@@ -53,6 +53,13 @@ ENDPOINTS = {
          'use_default_params': True,
          'add_auth_url': 'to_data',
          'content_type': 'application/x-www-form-urlencoded'},
+    'graphql':
+        {'address': '/graphql',
+         'is_api_call': False,
+         'use_default_params': False,
+         'add_auth_url': 'to_data',
+         'content_type': 'application/json',
+         'accept': 'application/json'},
     'browse':
         {'address': '/browse',
          'is_api_call': False,

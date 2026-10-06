@@ -22,7 +22,7 @@ class LoCo:
         self.data = path_response
         LOG.debug('LoCo data: {}', self.data)
         self.id = next(iter(self.data['locos']))  # Get loco root id
-        _filterout_loco_contexts(self.id, self.data, ['billboard'])
+        _filterout_loco_contexts(self.data, ['billboard'])
 
     def __getitem__(self, key):
         return _check_sentinel(self.data['locos'][self.id][key])
@@ -333,12 +333,12 @@ def _get_titles(videos):
             if _get_title(video)]
 
 
-def _filterout_loco_contexts(root_id, data, contexts):
+def _filterout_loco_contexts(data, contexts):
     """Deletes from the data all records related to the specified contexts"""
-    total_items = data['locos'][root_id]['componentSummary'].get('value', {}).get('length', 0)
-    for index in range(total_items - 1, -1, -1):
-        list_id = data['locos'][root_id][str(index)]['value'][1]
-        if not data['lists'][list_id]['componentSummary'].get('value', {}).get('context') in contexts:
-            continue
-        del data['lists'][list_id]
-        del data['locos'][root_id][str(index)]
+    lists = data.get('lists')
+    if not lists:
+        return
+    for list_id in list(lists):
+        context = lists[list_id].get('componentSummary', {}).get('value', {}).get('context')
+        if context in contexts:
+            del lists[list_id]

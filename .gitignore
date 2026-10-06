@@ -135,3 +135,15 @@ tests/userdata/imagecache/
 tests/userdata/metadata/
 tests/userdata/movies/
 tests/userdata/shows/
+
+# Superpowers working directories
+.worktrees/
+.superpowers/
+
+# Captured network traces (contain session material)
+references/
+*.har
+
+# Captured network traces (may contain session material)
+references/
+*.har

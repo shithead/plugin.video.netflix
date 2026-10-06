@@ -16,7 +16,7 @@ import requests.exceptions as req_exceptions
 import resources.lib.common as common
 import resources.lib.utils.website as website
 from resources.lib.common.exceptions import (APIError, WebsiteParsingError, MbrStatusError, MbrStatusAnonymousError,
-                                             HttpError401, NotLoggedInError)
+                                             HttpError401, HttpError404, NotLoggedInError)
 from resources.lib.database.db_utils import TABLE_SESSION
 from resources.lib.globals import G
 from resources.lib.kodi import ui
@@ -107,6 +107,12 @@ class SessionHTTPRequests(SessionBase):
                     return self._request(method, endpoint, True, **kwargs)
         if response.status_code == 401:
             raise HttpError401
+        if response.status_code == 404:
+            # A 404 that survived the session refresh attempt above does not belong to the session data
+            # (the endpoint address is valid), it means that the requested resource does not exist anymore.
+            # Raise a dedicated exception so that the path requests can skip the path and retry the
+            # remaining ones, instead of failing the whole request
+            raise HttpError404
         response.raise_for_status()
         return (_raise_api_error(response.json() if response.content else {})
                 if 'application/json' in response.headers.get('content-type', '')
@@ -174,9 +180,6 @@ class SessionHTTPRequests(SessionBase):
                 'falcor_server': '0.1.0',
                 'withSize': 'false',
                 'materialize': 'false',
-                'routeAPIRequestsThroughFTL': 'false',
-                'isVolatileBillboardsEnabled': 'true',
-                'isTop10Supported': 'true',
                 'original_path': '/shakti/mre/pathEvaluator'
             }
         if endpoint_conf['add_auth_url'] == 'to_params':

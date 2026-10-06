@@ -20,6 +20,10 @@ class HttpError401(Exception):
     """The request has returned http error 401 unauthorized for url ..."""
 
 
+class HttpError404(Exception):
+    """Raised when the Netflix API answers a path request with HTTP 404"""
+
+
 class WebsiteParsingError(Exception):
     """Parsing info from the Netflix Website failed"""
 
@@ -173,3 +177,18 @@ class InputStreamHelperError(Exception):
 
 class SlotNotImplemented(Exception):
     """IPC Slot not implemented"""
+
+
+# Exceptions for the GraphQL API
+
+
+class GraphQLRequestError(Exception):
+    """A GraphQL request could not be completed at the transport level"""
+
+
+class GraphQLAuthError(Exception):
+    """Netflix rejected the GraphQL request as unauthenticated"""
+
+
+class GraphQLProtocolError(Exception):
+    """A GraphQL response carried no usable data"""

@@ -12,17 +12,51 @@ import json
 
 import resources.lib.utils.api_paths as apipaths
 import resources.lib.common as common
+from resources.lib.common.exceptions import HttpError404
 from resources.lib.globals import G
-from resources.lib.services.nfsession.session.access import SessionAccess
+from resources.lib.services.nfsession.graphql.client import GraphQLClient, SessionGraphQLRequests
+from resources.lib.services.nfsession.session.path_blacklist import PATH_BLACKLIST
 from resources.lib.utils.logging import LOG, measure_exec_time_decorator
 
 
-class SessionPathRequests(SessionAccess):
+class SessionPathRequests(SessionGraphQLRequests, GraphQLClient):
     """Manages the PATH requests"""
 
     @measure_exec_time_decorator(is_immediate=True)
     def path_request(self, paths):
-        """Perform a path request against the Shakti API"""
+        """Perform a path request against the Shakti API, tolerating paths
+        that Netflix no longer supports"""
+        surviving = [path for path in paths
+                     if not PATH_BLACKLIST.is_blocked(json.dumps(path, separators=(',', ':')))]
+        if not surviving:
+            LOG.warn('All requested paths are blocked, skipping request')
+            return {}
+        return self._path_request_resilient(surviving)
+
+    def _path_request_resilient(self, paths):
+        """Perform a path request, halving the batch on HTTP 404 so that a
+        single retired path does not fail the whole request"""
+        try:
+            return self._request_paths(paths)
+        except HttpError404:
+            if len(paths) == 1:
+                key = json.dumps(paths[0], separators=(',', ':'))
+                LOG.warn('Netflix rejected the path {}, it will be skipped', key)
+                PATH_BLACKLIST.block(key)
+                return {}
+            midpoint = len(paths) // 2
+            LOG.debug('Path request failed with 404, splitting batch of {} paths',
+                      len(paths))
+            left = self._path_request_resilient(paths[:midpoint])
+            right = self._path_request_resilient(paths[midpoint:])
+            if not left:
+                return right
+            if not right:
+                return left
+            return common.merge_dicts(left, right)
+
+    def _request_paths(self, paths):
+        """Send a single path request batch"""
         LOG.debug('Executing path request: {}', paths)
         custom_params = {}
         # Use separators with dumps because Netflix rejects spaces

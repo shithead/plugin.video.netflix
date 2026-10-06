@@ -115,9 +115,12 @@ git remote add upstream https://github.com/asciidisco/plugin.video.netflix
    ```
 
 * Make sure to update, or add to the tests when appropriate. Patches and
-   features will not be accepted without tests. Run `make test` to check that
-   all tests pass after you've made changes.Run `make lint` to ensure
-   that your code meets our guildelines (PEP-8)
+   features will not be accepted without tests. Run the unit suite and both lint
+   gates as described in [docs/testing.md](docs/testing.md) to check that all
+   tests pass after you've made changes and that your code meets our guidelines
+   (PEP-8). The `make test` target still exists, but it drives the runtime
+   scripts in `tests/run.py` against a live Kodi and a MySQL backend, so it is
+   no substitute for the unit suite.
 
 * If you added or changed a feature, make sure to document it accordingly in
    the `README.md` file.

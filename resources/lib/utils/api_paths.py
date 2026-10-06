@@ -35,12 +35,10 @@ LENGTH_ATTRIBUTES = {
 
 """Predefined lambda expressions that return the number of video results within a path response dict"""
 
-ART_PARTIAL_PATHS = [
-    ['boxarts', [ART_SIZE_SD, ART_SIZE_FHD, ART_SIZE_POSTER], 'jpg', 'value'],
-    ['interestingMoment', [ART_SIZE_SD, ART_SIZE_FHD], 'jpg', 'value'],
-    ['artWorkByType', 'LOGO_BRANDED_HORIZONTAL', '_550x124', 'png', 'value'],  # 11/05/2020 same img of bb2OGLogo
-    ['storyArt', ART_SIZE_SD, 'jpg', 'value']  # 11/05/2020 same img of BGImages
-]
+# Artwork nodes (boxarts, storyArt, artWorkByType, interestingMoment) were removed
+# from the Netflix Falcor schema; artwork is now served by the GraphQL backend.
+# Keep the name defined so existing imports keep working.
+ART_PARTIAL_PATHS = []
 
 # Old image paths for reference
 # ['bb2OGLogo', '_550x124', 'png', 'value']
@@ -48,7 +46,7 @@ ART_PARTIAL_PATHS = [
 
 
 VIDEO_LIST_PARTIAL_PATHS = [
-    [['requestId', 'summary', 'title', 'synopsis', 'regularSynopsis', 'evidence', 'queue', 'inRemindMeList',
+    [['summary', 'title', 'synopsis', 'regularSynopsis', 'queue', 'inRemindMeList',
       'episodeCount', 'info', 'maturity', 'runtime', 'seasonCount', 'availability', 'trackIds',
       'releaseYear', 'userRating', 'numSeasonsLabel', 'bookmarkPosition', 'creditsOffset',
       'dpSupplementalMessage', 'watched', 'delivery', 'sequiturEvidence', 'promoVideo', 'availability', 'itemSummary']],
@@ -73,7 +71,7 @@ SEASONS_PARTIAL_PATHS = [
 ] + ART_PARTIAL_PATHS
 
 EPISODES_PARTIAL_PATHS = [
-    [['requestId', 'summary', 'synopsis', 'regularSynopsis', 'title', 'runtime', 'releaseYear', 'queue',
+    [['summary', 'synopsis', 'regularSynopsis', 'title', 'runtime', 'releaseYear', 'queue',
       'info', 'maturity', 'userRating', 'bookmarkPosition', 'creditsOffset',
       'watched', 'delivery', 'trackIds', 'availability']],
     [['genres', 'tags', 'creators', 'directors', 'cast'],

@@ -13,7 +13,8 @@ from resources.lib.common import cache_utils
 from resources.lib.globals import G
 from resources.lib.common.exceptions import (LoginError, MissingCredentialsError, CacheMiss, HttpError401, APIError,
                                              ErrorMsg)
-from .api_paths import EPISODES_PARTIAL_PATHS, ART_PARTIAL_PATHS, build_paths
+import resources.lib.utils.api_paths as apipaths
+from .api_paths import EPISODES_PARTIAL_PATHS, build_paths
 from .logging import LOG, measure_exec_time_decorator
 from ..database.db_utils import TABLE_SESSION
 
@@ -84,7 +85,8 @@ def get_video_raw_data(videoids, custom_partial_path=None):  # Do not apply cach
     if not custom_partial_path:
         paths = build_paths(['videos', video_ids], EPISODES_PARTIAL_PATHS)
         if videoids[0].mediatype == common.VideoId.EPISODE:
-            paths.extend(build_paths(['videos', int(videoids[0].tvshowid)], ART_PARTIAL_PATHS + [['title']]))
+            paths.extend(build_paths(['videos', int(videoids[0].tvshowid)],
+                                     apipaths.ART_PARTIAL_PATHS + [['title']]))
     else:
         paths = build_paths(['videos', video_ids], custom_partial_path)
     return common.make_call('path_request', paths)

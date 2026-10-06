@@ -17,12 +17,15 @@ import resources.lib.utils.website as website
 from resources.lib.common import cache_utils
 from resources.lib.common.exceptions import (NotLoggedInError, MissingCredentialsError, WebsiteParsingError,
                                              MbrStatusAnonymousError, MetadataNotAvailable, LoginValidateError,
-                                             HttpError401, InvalidProfilesError, ErrorMsgNoReport)
+                                             HttpError401, InvalidProfilesError, ErrorMsgNoReport, GraphQLAuthError,
+                                             GraphQLProtocolError, GraphQLRequestError)
 from resources.lib.globals import G
 from resources.lib.kodi import ui
+from resources.lib.services.nfsession.graphql.artwork import EMPTY_ART, extract_art
 from resources.lib.services.nfsession.session.path_requests import SessionPathRequests
 from resources.lib.utils import cookies
-from resources.lib.utils.api_paths import (EPISODES_PARTIAL_PATHS, ART_PARTIAL_PATHS, build_paths,
+import resources.lib.utils.api_paths as apipaths
+from resources.lib.utils.api_paths import (EPISODES_PARTIAL_PATHS, build_paths,
                                            VIDEO_LIST_PARTIAL_PATHS)
 from resources.lib.utils.logging import LOG, measure_exec_time_decorator
 
@@ -86,6 +89,50 @@ class NFSessionOperations(SessionPathRequests):
             # (CastagnaIT: i don't know the best way to handle this borderline case, but login again works)
             self.session.cookies.clear()
             self.login()
+
+    def get_video_art(self, videoid):
+        """Get the artwork for a video from the GraphQL endpoint.
+
+        Every failure degrades to empty art so the directory still renders;
+        the only exception is an auth failure, which is re-raised so the
+        session can be renewed.
+
+        A protocol failure degrades like a transport failure on purpose. Its
+        causes - a retired persisted query, a non-auth 'errors' body, an
+        HTML or WAF page - are not fixed by anything the caller could do, and
+        the user-visible result of all of them is a title without a picture,
+        not a crashed listing.
+
+        The same goes for an id that is not numeric at all: a SUPPLEMENTAL
+        videotype carries an evidence id, there is no video id to ask for, and
+        the title has no artwork to fetch. That degrades like every other
+        failure, it does not raise.
+
+        :param videoid: the video to look up
+        :return a dict with the Kodi art keys, empty on failure
+        """
+        try:
+            # Inside the try, not before it: a SUPPLEMENTAL videotype carries a
+            # non-numeric evidence id (videoid.py documents the shape) and
+            # int() raises on it. Those rows are built by dir_builder_items and
+            # reach get_art like any other, so the conversion is a failure mode
+            # of this method like every other one.
+            video_id = int(videoid.value)
+            data = self.graphql_request('DetailModal',
+                                        {'videoId': video_id,
+                                         'unifiedEntityId': f'Video:{video_id}'})
+        except (GraphQLRequestError, GraphQLProtocolError) as exc:
+            LOG.warn('Could not fetch artwork for video {}: {}', video_id, exc)
+            return dict(EMPTY_ART)
+        except GraphQLAuthError:
+            # Not swallowed on purpose: an expired session must reach the
+            # refresh path instead of being read as 'this title has no picture'.
+            LOG.warn('Artwork lookup for video {} rejected by the session', video_id)
+            raise
+        except ValueError:
+            LOG.warn('Artwork lookup skipped, "{}" is not a numeric Netflix video id', videoid.value)
+            return dict(EMPTY_ART)
+        return extract_art(data, video_id)
 
     def refresh_session_data(self, update_profiles):
         response = self.get_safe('browse')
@@ -263,7 +310,8 @@ class NFSessionOperations(SessionPathRequests):
         except (AttributeError, TypeError):
             if videoid.mediatype == common.VideoId.EPISODE:
                 paths = (build_paths(['videos', int(videoid.value)], EPISODES_PARTIAL_PATHS) +
-                         build_paths(['videos', int(videoid.tvshowid)], ART_PARTIAL_PATHS + [[['title', 'delivery']]]))
+                         build_paths(['videos', int(videoid.tvshowid)],
+                                     apipaths.ART_PARTIAL_PATHS + [[['title', 'delivery']]]))
             else:
                 paths = build_paths(['videos', int(videoid.value)], VIDEO_LIST_PARTIAL_PATHS)
             raw_data = self.path_request(paths)

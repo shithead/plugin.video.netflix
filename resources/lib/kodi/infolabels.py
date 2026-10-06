@@ -242,40 +242,62 @@ def get_quality_infos(delivery, video_codec_hint):
     return quality_infos
 
 
-def parse_art(videoid, item):
-    """Parse art info from a path request response to Kodi art infolabels"""
-    boxarts = common.get_multiple_paths(
-        paths.ART_PARTIAL_PATHS[0] + ['url'], item, {})
-    interesting_moment = common.get_multiple_paths(
-        paths.ART_PARTIAL_PATHS[1] + ['url'], item, {})
-    clearlogo = common.get_path_safe(
-        paths.ART_PARTIAL_PATHS[2] + ['url'], item)
-    fanart = common.get_path_safe(
-        paths.ART_PARTIAL_PATHS[3] + [0, 'url'], item)
+def parse_art(videoid, item, graphql_art=None):
+    """
+    Parse art info into Kodi art infolabels from two sources.
+
+    The Falcor path no longer serves artwork nodes, so itemSummary is the only
+    Falcor source that survived the artwork pruning. What it carries is a
+    342x192 landscape card, which is booked to 'poster' here because that slot
+    must not stay empty while the GraphQL source is unavailable. That booking
+    is a degraded fallback, not a claim that the card is a poster; which slot
+    it really belongs in is left open here. The GraphQL path supplies the real
+    thumbnail, fanart and logo.
+
+    :param videoid: the video the art belongs to
+    :param item: raw Falcor data, may be empty
+    :param graphql_art: art fields previously fetched via GraphQL
+    :return the Kodi art infolabels
+    """
     fallback = common.get_path_safe(['itemSummary', 'value', 'boxArt', 'url'], item)
     return _assign_art(videoid,
-                       boxart_large=boxarts.get(paths.ART_SIZE_FHD),
-                       boxart_small=boxarts.get(paths.ART_SIZE_SD),
-                       poster=boxarts.get(paths.ART_SIZE_POSTER),
-                       interesting_moment=interesting_moment.get(paths.ART_SIZE_FHD),
-                       clearlogo=clearlogo,
-                       fanart=fanart,
-                       fallback=fallback)
+                       fallback=fallback,
+                       **(graphql_art or {}))
 
 
 def _assign_art(videoid, **kwargs):
-    """Assign the art available from Netflix to appropriate Kodi art"""
-    art = {'poster': _best_art([kwargs['poster'], kwargs['fallback']]),
-           'fanart': _best_art([kwargs['fanart'],
-                                kwargs['interesting_moment'],
-                                kwargs['boxart_large'],
-                                kwargs['boxart_small']]),
-           'thumb': ((kwargs['interesting_moment']
-                      if videoid.mediatype in (common.VideoId.EPISODE, common.VideoId.SUPPLEMENTAL) else '')
-                     or kwargs['boxart_large'] or kwargs['boxart_small'])}
-    art['landscape'] = art['thumb']
+    """
+    Assign the art available from Netflix to appropriate Kodi art
+
+    Values are read with kwargs.get() so that art sources which are no
+    longer requested simply come back empty.
+
+    'thumb' and 'landscape' are inputs, not results: they carry the GraphQL
+    source and outrank the Falcor card, which is 342x192 landscape.
+    """
+    poster = kwargs.get('poster') or ''
+    fallback = kwargs.get('fallback') or ''
+    fanart = kwargs.get('fanart') or ''
+    interesting_moment = kwargs.get('interesting_moment') or ''
+    boxart_large = kwargs.get('boxart_large') or ''
+    boxart_small = kwargs.get('boxart_small') or ''
+    clearlogo = kwargs.get('clearlogo') or ''
+    # The 'graphql_' prefix marks the two inputs that come from the GraphQL
+    # source, the other locals carry the Falcor source.
+    graphql_thumb = kwargs.get('thumb') or ''
+    graphql_landscape = kwargs.get('landscape') or ''
+    # A GraphQL image outranks the Falcor card, which is 342x192 landscape
+    art = {'poster': _best_art([poster, fallback]),
+           'fanart': _best_art([fanart, interesting_moment, boxart_large, boxart_small]),
+           'thumb': (graphql_thumb
+                     or (interesting_moment
+                         if videoid.mediatype in (common.VideoId.EPISODE, common.VideoId.SUPPLEMENTAL) else '')
+                     or boxart_large or boxart_small)}
+    art['landscape'] = graphql_landscape or art['thumb']
+    # A bare UNSPECIFIED videotype gets no 'clearlogo' key at all, so a logo
+    # that GraphQL did supply is deliberately dropped, not smuggled in.
     if videoid.mediatype != common.VideoId.UNSPECIFIED:
-        art['clearlogo'] = _best_art([kwargs['clearlogo']])
+        art['clearlogo'] = _best_art([clearlogo])
     return art
 
 

@@ -14,8 +14,9 @@ from resources.lib.utils.data_types import (VideoListSorted, SubgenreList, Seaso
                                             SearchVideoList, CustomVideoList, LoLoMoCategory, VideoListSupplemental,
                                             VideosList)
 from resources.lib.common.exceptions import InvalidVideoListTypeError, InvalidVideoId
+import resources.lib.utils.api_paths as apipaths
 from resources.lib.utils.api_paths import (VIDEO_LIST_PARTIAL_PATHS, RANGE_PLACEHOLDER, VIDEO_LIST_BASIC_PARTIAL_PATHS,
-                                           SEASONS_PARTIAL_PATHS, EPISODES_PARTIAL_PATHS, ART_PARTIAL_PATHS,
+                                           SEASONS_PARTIAL_PATHS, EPISODES_PARTIAL_PATHS,
                                            TRAILER_PARTIAL_PATHS, PATH_REQUEST_SIZE_STD, build_paths,
                                            PATH_REQUEST_SIZE_MAX)
 from resources.lib.common import cache_utils
@@ -55,13 +56,22 @@ class DirectoryPathRequests:
         # - To get items for the main menu
         #      (when 'loco_known'==True and loco_contexts is set, see MAIN_MENU_ITEMS in globals.py)
         # - To get list items for menus that have multiple contexts set to 'loco_contexts' like 'recommendations' menu
+        LOG.debug('Requesting LoCo\'s root ID')
+        loco_response = self.nfsession.path_request([['loco', 'componentSummary']])
+        # The response is keyed by the requested root path, so the id is nested below 'loco'
+        loco_node = apipaths.jgraph_get('loco', loco_response) or {}
+        loco_id = apipaths.jgraph_get('id', apipaths.jgraph_get('componentSummary', loco_node) or {})
+        if not loco_id:
+            LOG.error('Cannot get the LoCo\'s root ID, response data: {}', loco_response)
+            return LoCo({'locos': {'EMPTY': {'componentSummary': {'$type': 'atom', 'value': {'length': 0}}}},
+                         'lists': {}})
         LOG.debug('Requesting LoCo root lists')
-        paths = ([['loco', 'componentSummary'],
-                  ['loco', {'from': 0, 'to': 50}, 'componentSummary'],
+        paths = ([['locos', loco_id, {'from': 0, 'to': 50}, 'componentSummary'],
                   # Titles of first 4 videos in each video list (needed only to show titles in the plot description)
-                  ['loco', {'from': 0, 'to': 50}, {'from': 0, 'to': 3}, 'reference', ['title', 'summary']]] +
-                 # Art for the first video of each context list (needed only to add art to the menu item)
-                 build_paths(['loco', {'from': 0, 'to': 50}, 0, 'reference'], ART_PARTIAL_PATHS))
+                  ['locos', loco_id, {'from': 0, 'to': 50}, {'from': 0, 'to': 3},
+                   'reference', ['title', 'summary']]] +
+                 build_paths(['locos', loco_id, {'from': 0, 'to': 50}, 0, 'reference'],
+                             apipaths.ART_PARTIAL_PATHS))
         call_args = {'paths': paths}
         path_response = self.nfsession.path_request(**call_args)
         return LoCo(path_response)
@@ -76,8 +86,8 @@ class DirectoryPathRequests:
                   # Titles of first 4 videos in each video list (needed only to show titles in the plot description)
                   ['genres', genre_id, 'rw',
                    {'from': 0, 'to': 48}, {'from': 0, 'to': 3}, 'reference', ['title', 'summary']]] +
-                 # Art for the first video of each context list (needed only to add art to the menu item)
-                 build_paths(['genres', genre_id, 'rw', {'from': 0, 'to': 48}, 0, 'reference'], ART_PARTIAL_PATHS) +
+                 build_paths(['genres', genre_id, 'rw', {'from': 0, 'to': 48}, 0, 'reference'],
+                             apipaths.ART_PARTIAL_PATHS) +
                  # IDs and names of sub-genres
                  [['genres', genre_id, 'subgenres', {'from': 0, 'to': 30}, ['id', 'name']]])
         call_args = {'paths': paths}
@@ -114,7 +124,7 @@ class DirectoryPathRequests:
         LOG.debug('Requesting the seasons list for show {}', videoid)
         call_args = {
             'paths': (build_paths(['videos', videoid.tvshowid], SEASONS_PARTIAL_PATHS) +
-                      build_paths(['videos', videoid.tvshowid], ART_PARTIAL_PATHS) +
+                      build_paths(['videos', videoid.tvshowid], apipaths.ART_PARTIAL_PATHS) +
                       [['videos', videoid.tvshowid, 'componentSummary']]),
             'length_params': ['stdlist_wid', ['videos', videoid.tvshowid, 'seasonList']],
             'perpetual_range_start': perpetual_range_start
@@ -132,7 +142,7 @@ class DirectoryPathRequests:
         paths = ([['seasons', videoid.seasonid, 'summary']] +
                  [['seasons', videoid.seasonid, 'componentSummary']] +
                  build_paths(['seasons', videoid.seasonid, 'episodes', RANGE_PLACEHOLDER], EPISODES_PARTIAL_PATHS) +
-                 build_paths(['videos', videoid.tvshowid], ART_PARTIAL_PATHS + [[['title', 'delivery']]]))
+                 build_paths(['videos', videoid.tvshowid], apipaths.ART_PARTIAL_PATHS + [[['title', 'delivery']]]))
         call_args = {
             'paths': paths,
             'length_params': ['stdlist_wid', ['seasons', videoid.seasonid, 'episodes']],
@@ -187,7 +197,6 @@ class DirectoryPathRequests:
 
         path_response = self.nfsession.perpetual_path_request(paths, [response_type, base_path], perpetual_range_start)
         return VideoListSorted(path_response, context_name, context_id, req_sort_order_type)
-
 
     @cache_utils.cache_output(cache_utils.CACHE_COMMON, identify_from_kwarg_name='context_id',
                               identify_append_from_kwarg_name='perpetual_range_start', ignore_self_class=True)
@@ -314,9 +323,8 @@ class DirectoryPathRequests:
                   # Titles of first 4 videos in each video list (needed only to show titles in the plot description)
                   ['lolomoByCategory', category_name,
                    {'from': 0, 'to': 10}, {'from': 0, 'to': 3}, 'reference', ['title', 'summary']]] +
-                 # Art for the first video of each context list (needed only to add art to the menu item)
                  build_paths(['lolomoByCategory', category_name,
-                              {'from': 0, 'to': 10}, 0, 'reference'], ART_PARTIAL_PATHS))
+                              {'from': 0, 'to': 10}, 0, 'reference'], apipaths.ART_PARTIAL_PATHS))
         call_args = {'paths': paths}
         path_response = self.nfsession.path_request(**call_args)
         return LoLoMoCategory(path_response)
